@@ -1,0 +1,26 @@
+# Backup of original uncompressed 3D models (kept locally, not committed)
+3d model/originals-backup/
+3d model/draco-webp-old/
+
+# Local dev / tooling
+node_modules/
+.playwright-mcp/
+serve.py
+js/config.js
+
+# react-three-fiber proof-of-concept (throwaway experiment, kept local only)
+poc-r3f/
+
+# Dev-only utility pages
+compare.html
+compression-compare.html
+measure.html
+vram-audit.html
+route-audit.html
+
+# Land polygon data (too large for repo, used only locally)
+js/ne_50m_land.json
+
+# Internal guide — do NOT commit to any repo (contains sensitive process info)
+REMOVE-CONTRIBUTOR.md
+TROUBLESHOOTING.md
