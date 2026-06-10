@@ -714,7 +714,7 @@
                         <div class="popup-notes">${h.notes}</div>
                     `);
 
-                const marker = new mapboxgl.Marker({ element: el })
+                const marker = new mapboxgl.Marker({ element: el, occludedOpacity: 0 })
                     .setLngLat(h.coords)
                     .setPopup(popup)
                     .addTo(map);
