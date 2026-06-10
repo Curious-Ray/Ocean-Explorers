@@ -223,10 +223,14 @@
         .info-panel.visible { display: block; }
 
         .info-panel-header {
+            position: sticky;
+            top: 0;
+            z-index: 1;
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 16px;
+            background: linear-gradient(180deg, rgba(6, 14, 26, 0.96) 0%, rgba(6, 14, 26, 0.88) 75%, rgba(6, 14, 26, 0) 100%);
         }
 
         .info-panel-title {
@@ -505,7 +509,7 @@
                 right: 12px;
                 left: 12px;
                 width: auto;
-                max-height: calc(100vh - 196px);
+                max-height: calc(100vh - 316px);
             }
 
             .legend {
@@ -656,84 +660,63 @@
         let activeCreature = null;
         let migrationVisible = false;
         let animationFrame = null;
-        let landGeoJSON = null;
         let activeHabitatPopup = null;
+        let landGeoJSON = null;
+        let landFeatureIndex = [];
 
         const HABITAT_SOURCE_ID = 'habitat-points';
         const HABITAT_HALO_LAYER_ID = 'habitat-points-halo';
         const HABITAT_DOT_LAYER_ID = 'habitat-points-dot';
+        const LAND_DATA_URL = './js/ne_110m_land.json';
+        const ROUTE_LAND_SAMPLE_KM = 35;
+
+        function getGeometryBbox(geometry) {
+            const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+
+            function visit(coords) {
+                if (typeof coords[0] === 'number') {
+                    bbox[0] = Math.min(bbox[0], coords[0]);
+                    bbox[1] = Math.min(bbox[1], coords[1]);
+                    bbox[2] = Math.max(bbox[2], coords[0]);
+                    bbox[3] = Math.max(bbox[3], coords[1]);
+                    return;
+                }
+                coords.forEach(visit);
+            }
+
+            visit(geometry.coordinates);
+            return bbox;
+        }
 
         async function loadLandData() {
             try {
-                const resp = await fetch('./js/ne_50m_land.json');
+                const resp = await fetch(LAND_DATA_URL);
+                if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+
                 landGeoJSON = await resp.json();
+                landFeatureIndex = landGeoJSON.features.map(feature => ({
+                    feature,
+                    bbox: feature.bbox || getGeometryBbox(feature.geometry),
+                }));
             } catch (e) {
                 console.warn('Land polygon validation unavailable:', e);
+                landGeoJSON = null;
+                landFeatureIndex = [];
             }
+        }
+
+        function isInsideBbox(coord, bbox) {
+            return coord[0] >= bbox[0] && coord[0] <= bbox[2]
+                && coord[1] >= bbox[1] && coord[1] <= bbox[3];
         }
 
         function isOnLand(coord) {
-            if (!landGeoJSON) return false;
+            if (!landFeatureIndex.length) return false;
+
             const pt = turf.point(coord);
-            for (const feature of landGeoJSON.features) {
-                if (turf.booleanPointInPolygon(pt, feature)) return true;
-            }
-            return false;
-        }
-
-        function validateRoute(coords) {
-            if (!landGeoJSON) return coords;
-
-            const flags = coords.map(c => isOnLand(c));
-            if (!flags.some(Boolean)) return coords;
-
-            const groups = [];
-            let gi = 0;
-            while (gi < flags.length) {
-                if (flags[gi]) {
-                    const start = gi;
-                    while (gi < flags.length && flags[gi]) gi++;
-                    groups.push({ start, end: gi - 1 });
-                } else {
-                    gi++;
-                }
-            }
-
-            const result = coords.map(c => [...c]);
-
-            for (const group of groups) {
-                const entryCoord = group.start > 0 ? coords[group.start - 1] : coords[group.start];
-                const exitCoord = group.end < coords.length - 1 ? coords[group.end + 1] : coords[group.end];
-                const bearing = turf.bearing(turf.point(entryCoord), turf.point(exitCoord));
-
-                const midIdx = Math.floor((group.start + group.end) / 2);
-                let bestSide = 90;
-                for (const side of [90, -90]) {
-                    for (let d = 50; d <= 300; d += 50) {
-                        const test = turf.destination(turf.point(coords[midIdx]), d, bearing + side, { units: 'kilometers' });
-                        if (!isOnLand(test.geometry.coordinates)) { bestSide = side; break; }
-                    }
-                    if (bestSide === side) break;
-                }
-
-                for (let j = group.start; j <= group.end; j++) {
-                    let nudged = false;
-                    const angles = [bestSide, -bestSide, bestSide * 0.5, -bestSide * 0.5];
-                    for (const angle of angles) {
-                        for (let dist = 30; dist <= 500; dist += 30) {
-                            const dest = turf.destination(turf.point(coords[j]), dist, bearing + angle, { units: 'kilometers' });
-                            if (!isOnLand(dest.geometry.coordinates)) {
-                                result[j] = dest.geometry.coordinates;
-                                nudged = true;
-                                break;
-                            }
-                        }
-                        if (nudged) break;
-                    }
-                }
-            }
-
-            return result;
+            return landFeatureIndex.some(({ feature, bbox }) => (
+                isInsideBbox(coord, bbox) && turf.booleanPointInPolygon(pt, feature)
+            ));
         }
 
         function getStatusClass(pop) {
@@ -846,20 +829,93 @@
             });
         }
 
-        function smoothRoute(coords) {
-            const validWaypoints = validateRoute(coords);
-            const line = turf.lineString(validWaypoints);
-            const curved = turf.bezierSpline(line, { resolution: 10000, sharpness: 0.85 });
-            return validateRoute(curved.geometry.coordinates);
+        function bringHabitatMarkersToFront() {
+            [HABITAT_HALO_LAYER_ID, HABITAT_DOT_LAYER_ID].forEach(id => {
+                if (map.getLayer(id)) map.moveLayer(id);
+            });
+        }
+
+        function normalizeLng(lng) {
+            if (lng > 180) return lng - 360;
+            if (lng < -180) return lng + 360;
+            return lng;
+        }
+
+        function interpolateCoord(start, end, t) {
+            let lngDelta = end[0] - start[0];
+            if (Math.abs(lngDelta) > 180) lngDelta += lngDelta > 0 ? -360 : 360;
+            return [
+                normalizeLng(start[0] + lngDelta * t),
+                start[1] + (end[1] - start[1]) * t,
+            ];
+        }
+
+        function densifyRoute(coords, intervalKm = ROUTE_LAND_SAMPLE_KM) {
+            const samples = [coords[0]];
+
+            for (let i = 0; i < coords.length - 1; i++) {
+                const start = coords[i];
+                const end = coords[i + 1];
+                const distance = turf.distance(turf.point(start), turf.point(end), { units: 'kilometers' });
+                const steps = Math.max(1, Math.ceil(distance / intervalKm));
+
+                for (let step = 1; step <= steps; step++) {
+                    samples.push(interpolateCoord(start, end, step / steps));
+                }
+            }
+
+            return samples;
+        }
+
+        function getRouteLandHits(coords, maxHits = 5) {
+            const hits = [];
+            for (const coord of densifyRoute(coords)) {
+                if (isOnLand(coord)) {
+                    hits.push(coord);
+                    if (hits.length >= maxHits) break;
+                }
+            }
+            return hits;
+        }
+
+        function createSmoothedRoute(coords, sharpness) {
+            const line = turf.lineString(coords);
+            return turf.bezierSpline(line, { resolution: 10000, sharpness }).geometry.coordinates;
+        }
+
+        function smoothRoute(coords, routeLabel) {
+            const candidates = [
+                { label: 'smooth', coords: createSmoothedRoute(coords, 0.55) },
+                { label: 'gentle', coords: createSmoothedRoute(coords, 0.25) },
+                { label: 'waypoints', coords: densifyRoute(coords, 80) },
+            ];
+
+            if (!landFeatureIndex.length) return candidates[0].coords;
+
+            for (const candidate of candidates) {
+                const landHits = getRouteLandHits(candidate.coords);
+                if (!landHits.length) return candidate.coords;
+
+                console.warn(`${routeLabel} ${candidate.label} migration route intersects land; trying fallback.`, landHits);
+            }
+
+            console.warn(`${routeLabel} migration route skipped because every candidate intersects land.`);
+            return null;
+        }
+
+        function flyToRouteStart(startCoord) {
+            map.flyTo({ center: startCoord, zoom: 2.6, duration: 1600 });
         }
 
         function showMigrationRoute(creature) {
             clearMigration();
-            if (!creature.migration) return;
+            if (!creature.migration) return false;
+
+            const route = smoothRoute(creature.migration.route, creature.name);
+            if (!route) return false;
 
             migrationVisible = true;
-            const rawRoute = creature.migration.route;
-            const route = smoothRoute(rawRoute);
+            const startCoord = route[0];
 
             const fullRoute = {
                 type: 'Feature',
@@ -930,6 +986,9 @@
             }
 
             animate();
+            bringHabitatMarkersToFront();
+            flyToRouteStart(startCoord);
+            return true;
         }
 
         function hideMigrationRoute() {
@@ -966,7 +1025,6 @@
             });
             html += '</div>';
 
-            /* Migration route UI hidden on 3D globe — see map-2d.html
             if (creature.migration) {
                 html += `
                     <div class="habitat-section">
@@ -990,9 +1048,9 @@
 
                 html += '</div>';
             }
-            */
 
             content.innerHTML = html;
+            panel.scrollTop = 0;
 
             content.querySelectorAll('.habitat-item').forEach(item => {
                 item.addEventListener('click', () => {
@@ -1010,9 +1068,16 @@
                         toggle.classList.remove('active');
                         toggle.querySelector('.migration-toggle-label').textContent = 'Show Route';
                     } else {
-                        showMigrationRoute(creature);
-                        toggle.classList.add('active');
-                        toggle.querySelector('.migration-toggle-label').textContent = 'Hide Route';
+                        if (showMigrationRoute(creature)) {
+                            toggle.classList.add('active');
+                            toggle.querySelector('.migration-toggle-label').textContent = 'Hide Route';
+                        } else {
+                            toggle.classList.remove('active');
+                            toggle.querySelector('.migration-toggle-label').textContent = 'Route Blocked';
+                            window.setTimeout(() => {
+                                toggle.querySelector('.migration-toggle-label').textContent = 'Show Route';
+                            }, 1600);
+                        }
                     }
                 });
             }
@@ -1049,7 +1114,7 @@
                     <div class="species-icon">${c.icon}</div>
                     <div class="species-info">
                         <div class="species-name">${c.name.toUpperCase()}</div>
-                        <div class="species-tag">${c.habitats.length} habitats</div>
+                        <div class="species-tag">${c.habitats.length} habitats${c.migration ? ' • migratory' : ''}</div>
                     </div>
                 `;
                 card.addEventListener('click', () => selectCreature(c.id));
@@ -1116,9 +1181,7 @@
         });
 
         map.on('load', async () => {
-            // Land polygon + migration routes disabled on 3D globe (GPU-heavy).
-            // See map-2d.html for the 2D habitat map with routes.
-            // await loadLandData();
+            await loadLandData();
             buildSpeciesStrip();
         });
     </script>

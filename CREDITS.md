@@ -5,6 +5,13 @@ and licenses. If you add or replace a model, add its entry here.
 
 ---
 
+## Map Data
+- **Natural Earth land polygons:** Public domain Natural Earth 1:110m land data converted to GeoJSON by [martynafford/natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson)
+- **Local file:** `js/ne_110m_land.json`
+- **License:** CC0 / public domain
+
+---
+
 ## Manta Ray (Model 84B — Manta Ray Swimming)
 - **Creator:** [DigitalLife3D](https://sketchfab.com/DigitalLife3D)
 - **Source:** https://skfb.ly/otY9O

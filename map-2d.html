@@ -218,10 +218,14 @@
         .info-panel.visible { display: block; }
 
         .info-panel-header {
+            position: sticky;
+            top: 0;
+            z-index: 1;
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 16px;
+            background: linear-gradient(180deg, rgba(6, 14, 26, 0.96) 0%, rgba(6, 14, 26, 0.88) 75%, rgba(6, 14, 26, 0) 100%);
         }
 
         .info-panel-title {
@@ -461,7 +465,7 @@
                 right: 12px;
                 left: 12px;
                 width: auto;
-                max-height: calc(100vh - 196px);
+                max-height: calc(100vh - 316px);
             }
 
             .legend {
@@ -603,10 +607,63 @@
         let activeCreature = null;
         let migrationVisible = false;
         let activeHabitatPopup = null;
+        let landGeoJSON = null;
+        let landFeatureIndex = [];
 
         const HABITAT_SOURCE_ID = 'habitat-points';
         const HABITAT_HALO_LAYER_ID = 'habitat-points-halo';
         const HABITAT_DOT_LAYER_ID = 'habitat-points-dot';
+        const LAND_DATA_URL = './js/ne_110m_land.json';
+        const ROUTE_LAND_SAMPLE_KM = 35;
+
+        function getGeometryBbox(geometry) {
+            const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+
+            function visit(coords) {
+                if (typeof coords[0] === 'number') {
+                    bbox[0] = Math.min(bbox[0], coords[0]);
+                    bbox[1] = Math.min(bbox[1], coords[1]);
+                    bbox[2] = Math.max(bbox[2], coords[0]);
+                    bbox[3] = Math.max(bbox[3], coords[1]);
+                    return;
+                }
+                coords.forEach(visit);
+            }
+
+            visit(geometry.coordinates);
+            return bbox;
+        }
+
+        async function loadLandData() {
+            try {
+                const resp = await fetch(LAND_DATA_URL);
+                if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+
+                landGeoJSON = await resp.json();
+                landFeatureIndex = landGeoJSON.features.map(feature => ({
+                    feature,
+                    bbox: feature.bbox || getGeometryBbox(feature.geometry),
+                }));
+            } catch (e) {
+                console.warn('Land polygon validation unavailable:', e);
+                landGeoJSON = null;
+                landFeatureIndex = [];
+            }
+        }
+
+        function isInsideBbox(coord, bbox) {
+            return coord[0] >= bbox[0] && coord[0] <= bbox[2]
+                && coord[1] >= bbox[1] && coord[1] <= bbox[3];
+        }
+
+        function isOnLand(coord) {
+            if (!landFeatureIndex.length) return false;
+
+            const pt = turf.point(coord);
+            return landFeatureIndex.some(({ feature, bbox }) => (
+                isInsideBbox(coord, bbox) && turf.booleanPointInPolygon(pt, feature)
+            ));
+        }
 
         function getStatusClass(pop) {
             if (pop === 'high') return 'status-high';
@@ -727,20 +784,88 @@
             });
         }
 
-        function smoothRoute(coords) {
+        function normalizeLng(lng) {
+            if (lng > 180) return lng - 360;
+            if (lng < -180) return lng + 360;
+            return lng;
+        }
+
+        function interpolateCoord(start, end, t) {
+            let lngDelta = end[0] - start[0];
+            if (Math.abs(lngDelta) > 180) lngDelta += lngDelta > 0 ? -360 : 360;
+            return [
+                normalizeLng(start[0] + lngDelta * t),
+                start[1] + (end[1] - start[1]) * t,
+            ];
+        }
+
+        function densifyRoute(coords, intervalKm = ROUTE_LAND_SAMPLE_KM) {
+            const samples = [coords[0]];
+
+            for (let i = 0; i < coords.length - 1; i++) {
+                const start = coords[i];
+                const end = coords[i + 1];
+                const distance = turf.distance(turf.point(start), turf.point(end), { units: 'kilometers' });
+                const steps = Math.max(1, Math.ceil(distance / intervalKm));
+
+                for (let step = 1; step <= steps; step++) {
+                    samples.push(interpolateCoord(start, end, step / steps));
+                }
+            }
+
+            return samples;
+        }
+
+        function getRouteLandHits(coords, maxHits = 5) {
+            const hits = [];
+            for (const coord of densifyRoute(coords)) {
+                if (isOnLand(coord)) {
+                    hits.push(coord);
+                    if (hits.length >= maxHits) break;
+                }
+            }
+            return hits;
+        }
+
+        function createSmoothedRoute(coords, sharpness) {
             const line = turf.lineString(coords);
-            const curved = turf.bezierSpline(line, { resolution: 10000, sharpness: 0.85 });
-            return curved.geometry.coordinates;
+            return turf.bezierSpline(line, { resolution: 10000, sharpness }).geometry.coordinates;
+        }
+
+        function smoothRoute(coords, routeLabel) {
+            const candidates = [
+                { label: 'smooth', coords: createSmoothedRoute(coords, 0.55) },
+                { label: 'gentle', coords: createSmoothedRoute(coords, 0.25) },
+                { label: 'waypoints', coords: densifyRoute(coords, 80) },
+            ];
+
+            if (!landFeatureIndex.length) return candidates[0].coords;
+
+            for (const candidate of candidates) {
+                const landHits = getRouteLandHits(candidate.coords);
+                if (!landHits.length) return candidate.coords;
+
+                console.warn(`${routeLabel} ${candidate.label} migration route intersects land; trying fallback.`, landHits);
+            }
+
+            console.warn(`${routeLabel} migration route skipped because every candidate intersects land.`);
+            return null;
+        }
+
+        function flyToRouteStart(startCoord) {
+            map.flyTo({ center: startCoord, zoom: 3, duration: 1600 });
         }
 
         function showMigrationRoute(creature) {
             clearMigration();
-            if (!creature.migration) return;
+            if (!creature.migration) return false;
+
+            const route = smoothRoute(creature.migration.route, creature.name);
+            if (!route) return false;
 
             migrationVisible = true;
-            const route = smoothRoute(creature.migration.route);
-            const startCoord = creature.migration.route[0];
-            const endCoord = creature.migration.route[creature.migration.route.length - 1];
+            const startCoord = route[0];
+            const endCoord = route[route.length - 1];
 
             const routeData = {
                 type: 'Feature',
@@ -839,6 +964,8 @@
             });
 
             bringHabitatMarkersToFront();
+            flyToRouteStart(startCoord);
+            return true;
         }
 
         function flyToCreature(creature) {
@@ -894,6 +1021,7 @@
             }
 
             content.innerHTML = html;
+            panel.scrollTop = 0;
 
             content.querySelectorAll('.habitat-item').forEach(item => {
                 item.addEventListener('click', () => {
@@ -911,9 +1039,16 @@
                         toggle.classList.remove('active');
                         toggle.querySelector('.migration-toggle-label').textContent = 'Show Route';
                     } else {
-                        showMigrationRoute(creature);
-                        toggle.classList.add('active');
-                        toggle.querySelector('.migration-toggle-label').textContent = 'Hide Route';
+                        if (showMigrationRoute(creature)) {
+                            toggle.classList.add('active');
+                            toggle.querySelector('.migration-toggle-label').textContent = 'Hide Route';
+                        } else {
+                            toggle.classList.remove('active');
+                            toggle.querySelector('.migration-toggle-label').textContent = 'Route Blocked';
+                            window.setTimeout(() => {
+                                toggle.querySelector('.migration-toggle-label').textContent = 'Show Route';
+                            }, 1600);
+                        }
                     }
                 });
             }
@@ -1016,7 +1151,8 @@
             map.flyTo({ center: [0, 20], zoom: 1.5, duration: 2000 });
         });
 
-        map.on('load', () => {
+        map.on('load', async () => {
+            await loadLandData();
             buildSpeciesStrip();
         });
     </script>
