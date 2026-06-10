@@ -63,11 +63,16 @@ sealif/
 No Mapbox token is committed to this repository.
 
 For GitHub Pages, add a repository secret named `MAPBOX_TOKEN` with the
-production Mapbox token. Restrict that token in Mapbox to:
+production Mapbox token. Restrict that token in Mapbox to the GitHub Pages
+origin:
 
 ```text
-https://curious-ray.github.io/Ocean-Explorers/
+https://curious-ray.github.io/
 ```
+
+Browsers send only this origin as the referrer for Mapbox's cross-origin tile
+requests, so restricting the token to the full `/Ocean-Explorers/` path can
+block map tiles.
 
 For local development, keep your localhost token out of Git:
 
