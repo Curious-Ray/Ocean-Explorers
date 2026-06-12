@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Ocean Explorers — 2D Habitat Map</title>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
@@ -24,6 +27,87 @@
             left: 0;
             width: 100%;
             height: 100%;
+        }
+
+        .habitat-pulse-marker {
+            --pulse-badge-size: 24px;
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        .habitat-pulse-svg {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: calc(var(--pulse-badge-size) * 2.15);
+            height: calc(var(--pulse-badge-size) * 2.15);
+            overflow: visible;
+            transform: translate(-50%, -50%);
+        }
+
+        .habitat-pulse-ring {
+            fill: none;
+            stroke: var(--pulse-color, #3df5c4);
+            stroke-width: 3px;
+            opacity: 0.98;
+            vector-effect: non-scaling-stroke;
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: habitat-pulse-ring 2s linear infinite;
+            will-change: stroke-width, transform;
+        }
+
+        .migration-route-overlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 2;
+        }
+
+        .migration-route-flow {
+            fill: none;
+            stroke: var(--route-flow-color, #3df5c4);
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-dasharray: 2 12;
+            opacity: 0.9;
+        }
+
+        .migration-route-tracer {
+            fill: var(--route-flow-color, #3df5c4);
+            opacity: 0.95;
+        }
+
+        @keyframes habitat-pulse-ring {
+            0% {
+                stroke-width: 3px;
+                transform: scale(1);
+            }
+            88% {
+                stroke-width: 0;
+                transform: scale(2.15);
+            }
+            100% {
+                stroke-width: 0;
+                transform: scale(2.15);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .habitat-pulse-ring {
+                animation: none;
+            }
+
+            .migration-route-tracer {
+                display: none;
+            }
         }
 
         .top-bar {
@@ -98,11 +182,28 @@
             letter-spacing: 0.5px;
             text-decoration: none;
             transition: all 0.2s;
+            cursor: pointer;
         }
 
         .view-toggle:hover {
             background: rgba(61, 245, 196, 0.12);
             border-color: rgba(61, 245, 196, 0.4);
+        }
+
+        button.view-toggle {
+            font: inherit;
+        }
+
+        .view-toggle.active {
+            background: rgba(61, 245, 196, 0.12);
+            border-color: rgba(61, 245, 196, 0.45);
+            color: #bafded;
+        }
+
+        .view-toggle:not(.active).pin-toggle {
+            border-color: rgba(136, 146, 164, 0.22);
+            background: rgba(136, 146, 164, 0.06);
+            color: #8892a4;
         }
 
         .species-strip {
@@ -533,6 +634,13 @@
             <div class="top-bar-title">OCEAN EXPLORERS — <span>HABITAT MAP</span></div>
         </div>
         <div class="top-bar-right">
+            <button class="view-toggle pin-toggle active" id="all-pins-toggle" type="button" aria-pressed="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 21s6-5.4 6-11a6 6 0 1 0-12 0c0 5.6 6 11 6 11z"/>
+                    <circle cx="12" cy="10" r="2"/>
+                </svg>
+                <span> PINS ON</span>
+            </button>
             <a href="map.html" class="view-toggle">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                 3D GLOBE
@@ -616,17 +724,25 @@
 
         let activeCreature = null;
         let migrationVisible = false;
-        let pulseAnimationFrame = null;
-        let pulseStartTime = null;
+        let allHabitatPinsEnabled = true;
+        let habitatPulseMarkers = [];
+        let habitatPulseSizeFrame = null;
+        let migrationRouteOverlay = null;
+        let routeOverlayUpdateFrame = null;
         let activeHabitatPopup = null;
         let landGeoJSON = null;
         let landFeatureIndex = [];
 
         const HABITAT_SOURCE_ID = 'habitat-points';
-        const HABITAT_PULSE_LAYER_ID = 'habitat-pulse-layer';
         const HABITAT_HALO_LAYER_ID = 'habitat-points-halo';
         const HABITAT_DOT_LAYER_ID = 'habitat-points-dot';
         const HABITAT_ICON_LAYER_ID = 'habitat-icon-layer';
+        const ALL_HABITAT_SOURCE_ID = 'all-habitat-points';
+        const ALL_HABITAT_CLUSTER_LAYER_ID = 'all-habitat-clusters';
+        const ALL_HABITAT_CLUSTER_COUNT_LAYER_ID = 'all-habitat-cluster-count';
+        const ALL_HABITAT_HALO_LAYER_ID = 'all-habitat-points-halo';
+        const ALL_HABITAT_DOT_LAYER_ID = 'all-habitat-points-dot';
+        const ALL_HABITAT_ICON_LAYER_ID = 'all-habitat-icon-layer';
         const HABITAT_ICON_IMAGE_NAMES = [
             'whale-tail',
             'sperm-whale',
@@ -757,8 +873,11 @@
         }
 
         function getHabitatPopupHTML(habitat) {
+            const displayName = habitat.creatureName
+                ? `${habitat.creatureName} - ${habitat.name}`
+                : habitat.name;
             return `
-                <div class="popup-name">${habitat.name}</div>
+                <div class="popup-name">${displayName}</div>
                 <div class="popup-row">Status: <span>${habitat.status}</span></div>
                 <div class="popup-row">Population: <span><span class="status-dot ${getStatusClass(habitat.population)}" style="margin-right:2px"></span>${habitat.population}</span></div>
                 <div class="popup-row">Season: <span>${habitat.season}</span></div>
@@ -772,13 +891,16 @@
                 activeHabitatPopup = null;
             }
 
-            if (pulseAnimationFrame) {
-                cancelAnimationFrame(pulseAnimationFrame);
-                pulseAnimationFrame = null;
+            habitatPulseMarkers.forEach(marker => marker.remove());
+            habitatPulseMarkers = [];
+            map.off('zoom', scheduleHabitatPulseMarkerSizeUpdate);
+            map.off('zoomend', updateHabitatPulseMarkerSizes);
+            if (habitatPulseSizeFrame) {
+                cancelAnimationFrame(habitatPulseSizeFrame);
+                habitatPulseSizeFrame = null;
             }
-            pulseStartTime = null;
 
-            [HABITAT_ICON_LAYER_ID, HABITAT_DOT_LAYER_ID, HABITAT_HALO_LAYER_ID, HABITAT_PULSE_LAYER_ID].forEach(id => {
+            [HABITAT_ICON_LAYER_ID, HABITAT_DOT_LAYER_ID, HABITAT_HALO_LAYER_ID].forEach(id => {
                 if (map.getLayer(id)) map.removeLayer(id);
             });
 
@@ -787,13 +909,8 @@
             }
         }
 
-        let antPathAnimation = null;
-
         function clearMigration() {
-            if (antPathAnimation) {
-                cancelAnimationFrame(antPathAnimation);
-                antPathAnimation = null;
-            }
+            clearMigrationRouteOverlay();
             ['migration-dashed', 'migration-line', 'migration-glow', 'migration-arrows',
              'migration-start-ring', 'migration-end-ring'].forEach(id => {
                 if (map.getLayer(id)) map.removeLayer(id);
@@ -804,19 +921,283 @@
             migrationVisible = false;
         }
 
-        function animateHabitatPulse(timestamp) {
-            if (!map.getLayer(HABITAT_PULSE_LAYER_ID)) {
-                pulseAnimationFrame = null;
-                pulseStartTime = null;
-                return;
-            }
+        function getAllHabitatFeatures() {
+            return creatureMapData.flatMap(creature => (
+                creature.habitats.map(habitat => ({
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: habitat.coords },
+                    properties: {
+                        creatureId: creature.id,
+                        creatureName: creature.name,
+                        name: habitat.name,
+                        status: habitat.status,
+                        population: habitat.population,
+                        season: habitat.season,
+                        notes: habitat.notes,
+                        color: getMarkerColor(habitat.population),
+                        icon: `habitat-icon-${creature.iconImage}`,
+                    }
+                }))
+            ));
+        }
 
-            if (pulseStartTime === null) pulseStartTime = timestamp;
-            const period = 1800;
-            const phase = ((timestamp - pulseStartTime) % period) / period;
-            map.setPaintProperty(HABITAT_PULSE_LAYER_ID, 'circle-radius', 12 + phase * 30);
-            map.setPaintProperty(HABITAT_PULSE_LAYER_ID, 'circle-stroke-opacity', Math.sin(phase * Math.PI) * 0.6);
-            pulseAnimationFrame = requestAnimationFrame(animateHabitatPulse);
+        function clearAllHabitatMarkers() {
+            [
+                ALL_HABITAT_ICON_LAYER_ID,
+                ALL_HABITAT_DOT_LAYER_ID,
+                ALL_HABITAT_HALO_LAYER_ID,
+                ALL_HABITAT_CLUSTER_COUNT_LAYER_ID,
+                ALL_HABITAT_CLUSTER_LAYER_ID,
+            ].forEach(id => {
+                if (map.getLayer(id)) map.removeLayer(id);
+            });
+
+            if (map.getSource(ALL_HABITAT_SOURCE_ID)) {
+                map.removeSource(ALL_HABITAT_SOURCE_ID);
+            }
+        }
+
+        function showAllHabitatMarkers() {
+            clearAllHabitatMarkers();
+            if (!allHabitatPinsEnabled || activeCreature) return;
+
+            map.addSource(ALL_HABITAT_SOURCE_ID, {
+                type: 'geojson',
+                cluster: true,
+                clusterMaxZoom: 3,
+                clusterRadius: 34,
+                data: {
+                    type: 'FeatureCollection',
+                    features: getAllHabitatFeatures(),
+                }
+            });
+
+            map.addLayer({
+                id: ALL_HABITAT_CLUSTER_LAYER_ID,
+                type: 'circle',
+                source: ALL_HABITAT_SOURCE_ID,
+                filter: ['has', 'point_count'],
+                paint: {
+                    'circle-color': [
+                        'step',
+                        ['get', 'point_count'],
+                        'rgba(61, 245, 196, 0.24)',
+                        4,
+                        'rgba(61, 245, 196, 0.34)',
+                        8,
+                        'rgba(245, 166, 35, 0.36)',
+                    ],
+                    'circle-radius': [
+                        'step',
+                        ['get', 'point_count'],
+                        15,
+                        4,
+                        19,
+                        8,
+                        23,
+                    ],
+                    'circle-stroke-color': 'rgba(186, 253, 237, 0.78)',
+                    'circle-stroke-width': 1.5,
+                }
+            });
+
+            map.addLayer({
+                id: ALL_HABITAT_CLUSTER_COUNT_LAYER_ID,
+                type: 'symbol',
+                source: ALL_HABITAT_SOURCE_ID,
+                filter: ['has', 'point_count'],
+                layout: {
+                    'text-field': ['get', 'point_count_abbreviated'],
+                    'text-size': 11,
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true,
+                },
+                paint: {
+                    'text-color': '#e9fff8',
+                    'text-halo-color': 'rgba(0, 0, 0, 0.55)',
+                    'text-halo-width': 1,
+                }
+            });
+
+            map.addLayer({
+                id: ALL_HABITAT_HALO_LAYER_ID,
+                type: 'circle',
+                source: ALL_HABITAT_SOURCE_ID,
+                filter: ['!', ['has', 'point_count']],
+                paint: {
+                    'circle-color': ['get', 'color'],
+                    'circle-radius': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        1, 9,
+                        4, 15,
+                    ],
+                    'circle-opacity': 0.16,
+                    'circle-blur': 0.5,
+                }
+            });
+
+            map.addLayer({
+                id: ALL_HABITAT_DOT_LAYER_ID,
+                type: 'circle',
+                source: ALL_HABITAT_SOURCE_ID,
+                filter: ['!', ['has', 'point_count']],
+                paint: {
+                    'circle-color': ['get', 'color'],
+                    'circle-radius': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        1, 7,
+                        4, 12,
+                    ],
+                    'circle-stroke-color': 'rgba(255, 255, 255, 0.48)',
+                    'circle-stroke-width': 1.5,
+                }
+            });
+
+            map.addLayer({
+                id: ALL_HABITAT_ICON_LAYER_ID,
+                type: 'symbol',
+                source: ALL_HABITAT_SOURCE_ID,
+                filter: ['!', ['has', 'point_count']],
+                layout: {
+                    'icon-image': ['get', 'icon'],
+                    'icon-allow-overlap': true,
+                    'icon-ignore-placement': true,
+                    'icon-size': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        1, 0.42,
+                        4, 0.68,
+                    ],
+                }
+            });
+        }
+
+        function zoomToAllHabitatCluster(feature) {
+            const source = map.getSource(ALL_HABITAT_SOURCE_ID);
+            if (!source || typeof source.getClusterExpansionZoom !== 'function') return;
+
+            const clusterId = feature.properties.cluster_id;
+            const center = feature.geometry.coordinates.slice();
+            let handled = false;
+
+            const applyZoom = (zoom) => {
+                if (handled || typeof zoom !== 'number') return;
+                handled = true;
+                map.easeTo({
+                    center,
+                    zoom: Math.min(zoom + 0.2, 5),
+                    duration: 700,
+                });
+            };
+
+            const onExpansionZoom = (err, zoom) => {
+                if (err) {
+                    console.warn('Unable to expand habitat cluster:', err);
+                    return;
+                }
+                applyZoom(zoom);
+            };
+
+            try {
+                const result = source.getClusterExpansionZoom(clusterId, onExpansionZoom);
+                if (typeof result === 'number') {
+                    applyZoom(result);
+                } else if (result && typeof result.then === 'function') {
+                    result.then(applyZoom).catch(err => {
+                        console.warn('Unable to expand habitat cluster:', err);
+                    });
+                }
+            } catch (err) {
+                console.warn('Unable to expand habitat cluster:', err);
+            }
+        }
+
+        function updateAllPinsToggle() {
+            const toggle = document.getElementById('all-pins-toggle');
+            if (!toggle) return;
+
+            toggle.classList.toggle('active', allHabitatPinsEnabled);
+            toggle.setAttribute('aria-pressed', allHabitatPinsEnabled ? 'true' : 'false');
+            toggle.querySelector('span').textContent = allHabitatPinsEnabled ? ' PINS ON' : ' PINS OFF';
+        }
+
+        function setupAllPinsToggle() {
+            const toggle = document.getElementById('all-pins-toggle');
+            if (!toggle) return;
+
+            updateAllPinsToggle();
+            toggle.addEventListener('click', () => {
+                allHabitatPinsEnabled = !allHabitatPinsEnabled;
+                updateAllPinsToggle();
+                if (activeCreature) return;
+                if (allHabitatPinsEnabled) {
+                    showAllHabitatMarkers();
+                } else {
+                    clearAllHabitatMarkers();
+                }
+            });
+        }
+
+        function getHabitatBadgeDiameter() {
+            const zoom = Math.max(1, Math.min(4, map.getZoom()));
+            const dotRadius = 10 + ((zoom - 1) / 3) * 6;
+            const strokeWidth = 2;
+            return `${((dotRadius + strokeWidth / 2) * 2).toFixed(1)}px`;
+        }
+
+        function updateHabitatPulseMarkerSizes() {
+            const badgeDiameter = getHabitatBadgeDiameter();
+            habitatPulseMarkers.forEach(marker => {
+                marker.getElement().style.setProperty('--pulse-badge-size', badgeDiameter);
+            });
+        }
+
+        function scheduleHabitatPulseMarkerSizeUpdate() {
+            if (habitatPulseSizeFrame) return;
+
+            habitatPulseSizeFrame = requestAnimationFrame(() => {
+                habitatPulseSizeFrame = null;
+                updateHabitatPulseMarkerSizes();
+            });
+        }
+
+        function addHabitatPulseMarkers(creature) {
+            habitatPulseMarkers = creature.habitats.map(habitat => {
+                const element = document.createElement('div');
+                element.className = 'habitat-pulse-marker';
+                element.style.setProperty('--pulse-color', getMarkerColor(habitat.population));
+
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.classList.add('habitat-pulse-svg');
+                svg.setAttribute('viewBox', '0 0 100 100');
+                svg.setAttribute('aria-hidden', 'true');
+
+                const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                ring.classList.add('habitat-pulse-ring');
+                ring.setAttribute('cx', '50');
+                ring.setAttribute('cy', '50');
+                ring.setAttribute('r', '23.26');
+                svg.appendChild(ring);
+                element.appendChild(svg);
+
+                return new mapboxgl.Marker({
+                    element,
+                    anchor: 'center',
+                    occludedOpacity: 0,
+                    pitchAlignment: 'viewport',
+                    rotationAlignment: 'viewport',
+                })
+                    .setLngLat(habitat.coords)
+                    .addTo(map);
+            });
+            updateHabitatPulseMarkerSizes();
+            map.on('zoom', scheduleHabitatPulseMarkerSizeUpdate);
+            map.on('zoomend', updateHabitatPulseMarkerSizes);
         }
 
         function addHabitatMarkers(creature) {
@@ -842,19 +1223,7 @@
                 }
             });
 
-            map.addLayer({
-                id: HABITAT_PULSE_LAYER_ID,
-                type: 'circle',
-                source: HABITAT_SOURCE_ID,
-                paint: {
-                    'circle-color': ['get', 'color'],
-                    'circle-radius': 12,
-                    'circle-opacity': 0,
-                    'circle-stroke-color': ['get', 'color'],
-                    'circle-stroke-width': 3,
-                    'circle-stroke-opacity': 0,
-                }
-            });
+            addHabitatPulseMarkers(creature);
 
             map.addLayer({
                 id: HABITAT_HALO_LAYER_ID,
@@ -909,14 +1278,122 @@
                     ],
                 }
             });
-
-            if (!pulseAnimationFrame) pulseAnimationFrame = requestAnimationFrame(animateHabitatPulse);
         }
 
         function bringHabitatMarkersToFront() {
-            [HABITAT_PULSE_LAYER_ID, HABITAT_HALO_LAYER_ID, HABITAT_DOT_LAYER_ID, HABITAT_ICON_LAYER_ID].forEach(id => {
+            [HABITAT_HALO_LAYER_ID, HABITAT_DOT_LAYER_ID, HABITAT_ICON_LAYER_ID].forEach(id => {
                 if (map.getLayer(id)) map.moveLayer(id);
             });
+        }
+
+        function sampleRouteForOverlay(route, maxPoints = 180) {
+            if (route.length <= maxPoints) return route;
+
+            const samples = [];
+            const stride = (route.length - 1) / (maxPoints - 1);
+            for (let i = 0; i < maxPoints; i++) {
+                samples.push(route[Math.round(i * stride)]);
+            }
+            return samples;
+        }
+
+        function formatMigrationRouteOverlayPath(coords) {
+            const width = map.getCanvas().clientWidth || map.getContainer().clientWidth;
+            const height = map.getCanvas().clientHeight || map.getContainer().clientHeight;
+            const jumpLimit = Math.max(width, height) * 1.35;
+            let previousPoint = null;
+            let pathData = '';
+
+            coords.forEach(coord => {
+                const point = map.project(coord);
+                if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+
+                const x = Number(point.x.toFixed(1));
+                const y = Number(point.y.toFixed(1));
+                const shouldRestart = !previousPoint || Math.hypot(x - previousPoint.x, y - previousPoint.y) > jumpLimit;
+                pathData += `${shouldRestart ? 'M' : 'L'}${x} ${y} `;
+                previousPoint = { x, y };
+            });
+
+            return pathData;
+        }
+
+        function updateMigrationRouteOverlay() {
+            if (!migrationRouteOverlay) return;
+
+            const width = map.getCanvas().clientWidth || map.getContainer().clientWidth;
+            const height = map.getCanvas().clientHeight || map.getContainer().clientHeight;
+            const pathData = formatMigrationRouteOverlayPath(migrationRouteOverlay.coords);
+            migrationRouteOverlay.svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            migrationRouteOverlay.svg.setAttribute('width', width);
+            migrationRouteOverlay.svg.setAttribute('height', height);
+            migrationRouteOverlay.path.setAttribute('d', pathData);
+            migrationRouteOverlay.tracers.forEach(tracer => {
+                tracer.motion.setAttribute('path', pathData);
+            });
+        }
+
+        function scheduleMigrationRouteOverlayUpdate() {
+            if (!migrationRouteOverlay || routeOverlayUpdateFrame) return;
+
+            routeOverlayUpdateFrame = requestAnimationFrame(() => {
+                routeOverlayUpdateFrame = null;
+                updateMigrationRouteOverlay();
+            });
+        }
+
+        function clearMigrationRouteOverlay() {
+            if (routeOverlayUpdateFrame) {
+                cancelAnimationFrame(routeOverlayUpdateFrame);
+                routeOverlayUpdateFrame = null;
+            }
+
+            if (!migrationRouteOverlay) return;
+
+            map.off('move', scheduleMigrationRouteOverlayUpdate);
+            map.off('resize', scheduleMigrationRouteOverlayUpdate);
+            migrationRouteOverlay.svg.remove();
+            migrationRouteOverlay = null;
+        }
+
+        function showAnimatedMigrationRoute(route) {
+            clearMigrationRouteOverlay();
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.classList.add('migration-route-overlay');
+            svg.setAttribute('aria-hidden', 'true');
+            svg.style.setProperty('--route-flow-color', '#3df5c4');
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.classList.add('migration-route-flow');
+            svg.appendChild(path);
+
+            const tracers = [0, -2, -4].map(begin => {
+                const tracer = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                tracer.classList.add('migration-route-tracer');
+                tracer.setAttribute('r', '3.5');
+
+                const motion = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+                motion.setAttribute('dur', '6s');
+                motion.setAttribute('repeatCount', 'indefinite');
+                motion.setAttribute('begin', `${begin}s`);
+
+                tracer.appendChild(motion);
+                svg.appendChild(tracer);
+                return { tracer, motion };
+            });
+
+            map.getContainer().appendChild(svg);
+            migrationRouteOverlay = {
+                svg,
+                path,
+                tracers,
+                coords: sampleRouteForOverlay(route),
+            };
+
+            updateMigrationRouteOverlay();
+            map.on('move', scheduleMigrationRouteOverlayUpdate);
+            map.on('resize', scheduleMigrationRouteOverlayUpdate);
         }
 
         function normalizeLng(lng) {
@@ -1054,29 +1531,7 @@
                 }
             });
 
-            const dashArraySequence = [
-                [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5],
-                [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
-                [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5],
-                [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1],
-                [0, 3.5, 3, 0.5]
-            ];
-
-            let step = 0;
-            function animateDashArray(timestamp) {
-                if (!map.getLayer('migration-dashed')) {
-                    antPathAnimation = null;
-                    return;
-                }
-
-                const newStep = parseInt((timestamp / 50) % dashArraySequence.length);
-                if (newStep !== step) {
-                    map.setPaintProperty('migration-dashed', 'line-dasharray', dashArraySequence[newStep]);
-                    step = newStep;
-                }
-                antPathAnimation = requestAnimationFrame(animateDashArray);
-            }
-            antPathAnimation = requestAnimationFrame(animateDashArray);
+            showAnimatedMigrationRoute(route);
 
             map.addSource('migration-start', {
                 type: 'geojson',
@@ -1211,6 +1666,7 @@
 
             activeCreature = creature;
             clearMigration();
+            clearAllHabitatMarkers();
 
             document.querySelectorAll('.species-card').forEach(card => {
                 const isActive = card.dataset.id === id;
@@ -1252,10 +1708,23 @@
         }
 
         map.on('click', (event) => {
-            if (!map.getLayer(HABITAT_DOT_LAYER_ID)) return;
+            if (map.getLayer(ALL_HABITAT_CLUSTER_LAYER_ID)) {
+                const clusterFeatures = map.queryRenderedFeatures(event.point, {
+                    layers: [ALL_HABITAT_CLUSTER_LAYER_ID]
+                });
+                if (clusterFeatures.length) {
+                    zoomToAllHabitatCluster(clusterFeatures[0]);
+                    return;
+                }
+            }
+
+            const queryLayers = [];
+            if (map.getLayer(HABITAT_DOT_LAYER_ID)) queryLayers.push(HABITAT_DOT_LAYER_ID);
+            if (map.getLayer(ALL_HABITAT_DOT_LAYER_ID)) queryLayers.push(ALL_HABITAT_DOT_LAYER_ID);
+            if (!queryLayers.length) return;
 
             const features = map.queryRenderedFeatures(event.point, {
-                layers: [HABITAT_DOT_LAYER_ID]
+                layers: queryLayers
             });
 
             if (!features.length) return;
@@ -1279,13 +1748,17 @@
         });
 
         map.on('mousemove', (event) => {
-            if (!map.getLayer(HABITAT_DOT_LAYER_ID)) {
+            const queryLayers = [];
+            if (map.getLayer(ALL_HABITAT_CLUSTER_LAYER_ID)) queryLayers.push(ALL_HABITAT_CLUSTER_LAYER_ID);
+            if (map.getLayer(HABITAT_DOT_LAYER_ID)) queryLayers.push(HABITAT_DOT_LAYER_ID);
+            if (map.getLayer(ALL_HABITAT_DOT_LAYER_ID)) queryLayers.push(ALL_HABITAT_DOT_LAYER_ID);
+            if (!queryLayers.length) {
                 map.getCanvas().style.cursor = '';
                 return;
             }
 
             const features = map.queryRenderedFeatures(event.point, {
-                layers: [HABITAT_DOT_LAYER_ID]
+                layers: queryLayers
             });
             map.getCanvas().style.cursor = features.length ? 'pointer' : '';
         });
@@ -1299,6 +1772,7 @@
                 c.setAttribute('aria-pressed', 'false');
             });
             activeCreature = null;
+            showAllHabitatMarkers();
             map.flyTo({ center: [0, 20], zoom: 1.5, duration: 2000 });
         });
 
@@ -1306,6 +1780,8 @@
             loadHabitatIconImages();
             await loadLandData();
             buildSpeciesStrip();
+            setupAllPinsToggle();
+            showAllHabitatMarkers();
         });
     </script>
 </body>

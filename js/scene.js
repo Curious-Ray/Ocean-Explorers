@@ -11,7 +11,13 @@ export class SceneManager {
         this.canvas = document.getElementById(canvasId);
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
+        this.renderer = new THREE.WebGLRenderer({
+            canvas: this.canvas,
+            antialias: false,
+            alpha: false,
+            preserveDrawingBuffer: true,
+            powerPreference: 'low-power'
+        });
 
         this.clock = new THREE.Clock();
         this.particles = null;
@@ -24,6 +30,11 @@ export class SceneManager {
         this.currentColor = new THREE.Color(0x0a0e14);
         this.mixers = [];
         this.modelsCache = {};
+        this.activeFrameRate = 30;
+        this.activeUntil = 0;
+        this.animationFrameId = null;
+        this._lastFrameTime = 0;
+        this.isCanvasFrozen = false;
 
         // Models are Draco-compressed (geometry) + WebP textures.
         // DRACOLoader is required to decode the geometry; the decoder
@@ -47,8 +58,23 @@ export class SceneManager {
     }
 
     init() {
+        this.snapshotImage = document.createElement('img');
+        this.snapshotImage.alt = '';
+        this.snapshotImage.setAttribute('aria-hidden', 'true');
+        Object.assign(this.snapshotImage.style, {
+            position: 'fixed',
+            inset: '0',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            zIndex: '0',
+            pointerEvents: 'none',
+            display: 'none',
+        });
+        this.canvas.insertAdjacentElement('afterend', this.snapshotImage);
+
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.0;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -96,8 +122,20 @@ export class SceneManager {
         this.controls.enableDamping = true; // Smooth inertia
         this.controls.dampingFactor = 0.05;
         this.controls.enableZoom = true; // Allow zooming in on the models
+        this.markSceneActive = () => {
+            this.requestRenderBurst(2500);
+        };
+        this.controls.addEventListener('start', this.markSceneActive);
+        this.controls.addEventListener('change', this.markSceneActive);
+        this.controls.addEventListener('end', this.markSceneActive);
+        this.canvas.addEventListener('pointerdown', this.markSceneActive, { passive: true });
+        this.canvas.addEventListener('wheel', this.markSceneActive, { passive: true });
+        window.addEventListener('keydown', this.markSceneActive);
 
         window.addEventListener('resize', () => this.onWindowResize());
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) this.requestRenderBurst(800);
+        });
         this._readyFired = false;
     }
 
@@ -311,6 +349,8 @@ export class SceneManager {
     }
 
     updateCreature(creature) {
+        this.requestRenderBurst(3500);
+
         if (this.creatureMesh) {
             this.scene.remove(this.creatureMesh);
             this.creatureMesh = null;
@@ -396,6 +436,7 @@ export class SceneManager {
 
             this.creatureMesh = wrapper;
             this.scene.add(this.creatureMesh);
+            this.requestRenderBurst(3500);
 
             if (creature.useDirectLighting) {
                 this.scene.environment = null;
@@ -505,18 +546,65 @@ export class SceneManager {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.requestRenderBurst(800);
     }
 
-    animate() {
-        requestAnimationFrame(() => this.animate());
-        
+    requestRenderBurst(duration = 2500) {
+        if (document.hidden) return;
+
+        this.resumeCanvas();
+
+        const now = performance.now();
+        this.activeUntil = Math.max(this.activeUntil, now + duration);
+
+        if (this.animationFrameId === null) {
+            this.animationFrameId = requestAnimationFrame((frameTime) => this.animate(frameTime));
+        }
+    }
+
+    resumeCanvas() {
+        if (!this.isCanvasFrozen) return;
+        this.canvas.style.display = 'block';
+        this.snapshotImage.style.display = 'none';
+        this.isCanvasFrozen = false;
+    }
+
+    freezeCanvas() {
+        if (this.isCanvasFrozen || !this.snapshotImage || !this.creatureMesh) return;
+
+        try {
+            this.snapshotImage.src = this.canvas.toDataURL('image/webp', 0.82);
+            this.snapshotImage.style.display = 'block';
+            this.canvas.style.display = 'none';
+            this.isCanvasFrozen = true;
+        } catch (error) {
+            console.warn('Could not freeze WebGL canvas:', error);
+        }
+    }
+
+    animate(frameTime = performance.now()) {
+        this.animationFrameId = null;
+
+        if (document.hidden) return;
+
+        const frameInterval = 1000 / this.activeFrameRate;
+        if (this._lastFrameTime && frameTime - this._lastFrameTime < frameInterval) {
+            if (frameTime < this.activeUntil) {
+                this.animationFrameId = requestAnimationFrame((nextFrameTime) => this.animate(nextFrameTime));
+            } else {
+                this.freezeCanvas();
+            }
+            return;
+        }
+        this._lastFrameTime = frameTime;
+
         if (!this._readyFired && this.onReady) {
             this._readyFired = true;
             this.onReady();
         }
 
         const elapsedTime = this.clock.getElapsedTime();
-        const delta = elapsedTime - (this._lastTime || 0);
+        const delta = Math.min(elapsedTime - (this._lastTime || elapsedTime), 1 / 30);
         this._lastTime = elapsedTime;
 
         for (const mixer of this.mixers) {
@@ -585,5 +673,11 @@ export class SceneManager {
         }
 
         this.renderer.render(this.scene, this.camera);
+
+        if (frameTime < this.activeUntil && this.animationFrameId === null) {
+            this.animationFrameId = requestAnimationFrame((nextFrameTime) => this.animate(nextFrameTime));
+        } else if (frameTime >= this.activeUntil) {
+            this.freezeCanvas();
+        }
     }
 }

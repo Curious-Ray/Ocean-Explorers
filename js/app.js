@@ -20,7 +20,7 @@ class App {
 
         this.selectCreature(creatures[0].id);
 
-        this.sceneManager.animate();
+        this.sceneManager.requestRenderBurst(5000);
 
         this.uiManager.renderSidebar(creatures, creatures[0].id, (id) => this.selectCreature(id));
         this.uiManager.renderPagination(creatures, creatures[0].id, (id) => this.selectCreature(id));
@@ -30,7 +30,7 @@ class App {
         const headerCenter = document.getElementById('header-center');
         headerCenter.innerHTML = `
             <div class="scan-indicator">
-                <span class="scan-indicator-label">SCAN ACTIVE</span>
+                <span class="scan-indicator-label">OCEAN MARVELS FACTS</span>
                 <div class="scan-dots">
                     ${[1,2,3,4,5].map(() => '<div class="scan-dot"></div>').join('')}
                 </div>
@@ -49,7 +49,7 @@ class App {
     setupEventListeners() {
         document.getElementById('btn-explore').addEventListener('click', () => {
             const creature = creatures[this.currentCreatureIndex];
-            console.log(`Exploring ${creature.name}...`);
+            console.log(`Viewing facts for ${creature.name}...`);
             this.animManager.scanPulse(document.querySelector('.scan-circle'));
         });
 

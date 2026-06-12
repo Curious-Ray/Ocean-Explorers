@@ -57,14 +57,18 @@ export class UIManager {
 
         await this.anim.transitionCreature(this.creatureDescription, () => {
             const creditHtml = creature.credit
-                ? `<div class="model-credit">3D model: <a href="${creature.credit.url}" target="_blank" rel="noopener">"${creature.credit.title}"</a> by ${creature.credit.author} · ${creature.credit.license}</div>`
+                ? `<div class="model-credit">3D model: <a href="${creature.credit.url}" target="_blank" rel="noopener">"${creature.credit.title}"</a> by ${creature.credit.author} - ${creature.credit.license}</div>`
+                : '';
+            const sourceHtml = creature.sourceUrl
+                ? `<div class="model-credit">Facts adapted from <a href="${creature.sourceUrl}" target="_blank" rel="noopener">Delightful Oceans Ocean Marvels</a></div>`
                 : '';
             this.creatureDescription.innerHTML = `
                 <p>${creature.description}</p>
                 <div class="sector-badge">
-                    <span>${creature.sector || 'Ocean Sector Unknown'}</span>
+                    <span>${creature.scientificName || creature.biome || 'Marine species profile'}</span>
                 </div>
                 ${creditHtml}
+                ${sourceHtml}
             `;
         });
 
@@ -130,18 +134,38 @@ export class UIManager {
 
     getStatPercent(key, value) {
         const map = {
-            size: 60, habitat: 75, diet: 65, lifespan: 70, speed: 55, status: 80,
-            intelligence: 85
+            size: 82,
+            mass: 78,
+            range: 76,
+            habitat: 74,
+            diet: 68,
+            lifespan: 72,
+            speed: 86,
+            status: 70,
+            intelligence: 88,
+            migration: 90,
+            communication: 84,
+            signature: 80,
+            dive: 92,
+            senses: 88,
+            navigation: 86,
+            behavior: 82,
+            social: 88,
+            population: 74,
+            maturity: 78,
+            camouflage: 90,
+            feeding: 76
         };
-        return map[key] || 50 + Math.random() * 30;
+        return map[key] || 72;
     }
 
     renderMissions(creature) {
+        const facts = creature.missions || [];
         this.missionsPanel.innerHTML = `
-            <h3 class="orbitron section-title">HIGHLIGHTS & MISSIONS</h3>
-            ${creature.missions.map(m => `
+            <h3 class="orbitron section-title">WHAT MAKES THEM SPECIAL</h3>
+            ${facts.map(m => `
                 <div class="mission-item">
-                    <div class="mission-icon">${m.icon}</div>
+                    <div class="mission-icon">${m.icon || ''}</div>
                     <div class="mission-content">
                         <h4 class="mission-title">${m.title}</h4>
                         <p class="mission-desc">${m.desc}</p>
@@ -155,12 +179,11 @@ export class UIManager {
     }
 
     updateExpeditionLog(creature) {
-        const log = creature.expeditionLog || { current: 0, total: 42 };
-        const percent = (log.current / log.total) * 100;
+        const factCount = creature.missions?.length || 0;
         this.expeditionLog.innerHTML = `
             <div class="log-label">
-                <span class="orbitron">EXPEDITION LOG</span>
-                <span class="log-count">${log.current} / ${log.total}</span>
+                <span class="orbitron">OCEAN MARVELS FACTS</span>
+                <span class="log-count">${factCount} key facts</span>
             </div>
             <div class="log-bar">
                 <div class="log-fill" style="width: 0%"></div>
@@ -168,7 +191,7 @@ export class UIManager {
         `;
         requestAnimationFrame(() => {
             const fill = this.expeditionLog.querySelector('.log-fill');
-            if (fill) this.anim.animateProgressBar(fill, percent, 1200);
+            if (fill) this.anim.animateProgressBar(fill, 100, 1200);
         });
     }
 

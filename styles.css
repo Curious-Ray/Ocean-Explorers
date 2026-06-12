@@ -135,17 +135,17 @@ h1, h2, h3, .orbitron {
 }
 
 .glass-panel {
-    background: var(--glass-bg);
-    backdrop-filter: blur(var(--panel-blur));
-    -webkit-backdrop-filter: blur(var(--panel-blur));
+    background: rgba(10, 24, 42, 0.84);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid var(--glass-border);
     border-radius: 20px;
 }
 
 .glass-card {
-    background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(10, 24, 42, 0.76);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid var(--glass-border);
     border-radius: 16px;
     padding: 20px;
@@ -228,7 +228,7 @@ h1, h2, h3, .orbitron {
     color: var(--text-main);
     cursor: pointer;
     opacity: 0.6;
-    transition: all 0.3s;
+    transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease;
     padding: 6px;
     border-radius: 50%;
 }
@@ -269,7 +269,7 @@ h1, h2, h3, .orbitron {
     padding: 10px 12px;
     border-radius: 14px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     border: 1px solid transparent;
     position: relative;
 }
@@ -282,7 +282,6 @@ h1, h2, h3, .orbitron {
 .creature-card.active {
     background: var(--accent-soft);
     border-color: var(--accent-ring);
-    box-shadow: 0 0 25px var(--accent-glow);
 }
 
 .card-img {
@@ -315,7 +314,6 @@ h1, h2, h3, .orbitron {
 
 .creature-card.active .card-scan-ring {
     opacity: 0.5;
-    animation: scanPulse 2s ease-in-out infinite;
 }
 
 .card-info h3 {
@@ -477,8 +475,7 @@ h1, h2, h3, .orbitron {
     width: 200px;
     height: 200px;
     object-fit: contain;
-    filter: drop-shadow(0 0 30px var(--accent-glow));
-    animation: float 4s ease-in-out infinite;
+    filter: none;
 }
 
 .scan-circle {
@@ -500,10 +497,14 @@ h1, h2, h3, .orbitron {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 0;
+    width: 70%;
     height: 2px;
     background: linear-gradient(to right, transparent, var(--primary), transparent);
-    animation: scanLine 3s ease-in-out infinite;
+    opacity: 0.35;
+}
+
+.scan-circle.scanning::before {
+    animation: scanLine 1.5s ease-out forwards;
 }
 
 /* Anatomy Callouts */
@@ -526,8 +527,7 @@ h1, h2, h3, .orbitron {
     height: 10px;
     background: var(--primary);
     border-radius: 50%;
-    box-shadow: 0 0 10px var(--primary);
-    animation: pulse 2s ease-in-out infinite;
+    box-shadow: none;
 }
 
 .anatomy-tooltip {
@@ -535,14 +535,15 @@ h1, h2, h3, .orbitron {
     left: 18px;
     top: -8px;
     background: var(--tooltip-bg);
-    backdrop-filter: blur(10px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid var(--glass-border);
     padding: 8px 12px;
     border-radius: 8px;
     min-width: 140px;
     opacity: 0;
     transform: translateX(-5px);
-    transition: all 0.2s ease-out;
+    transition: opacity 0.2s ease-out, transform 0.2s ease-out;
     pointer-events: none;
 }
 
@@ -623,7 +624,6 @@ h1, h2, h3, .orbitron {
 .stat-fill {
     height: 100%;
     background: linear-gradient(to right, var(--primary), var(--primary-2));
-    box-shadow: 0 0 8px var(--primary);
     transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -636,7 +636,7 @@ h1, h2, h3, .orbitron {
     border-radius: 12px;
     margin-bottom: 8px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     border: 1px solid transparent;
 }
 
@@ -747,7 +747,7 @@ h1, h2, h3, .orbitron {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.3s;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
     letter-spacing: 2px;
     font-family: var(--font-head);
 }
@@ -755,12 +755,10 @@ h1, h2, h3, .orbitron {
 .action-btn.primary {
     background: var(--primary);
     color: var(--on-accent);
-    box-shadow: 0 0 20px var(--accent-glow);
 }
 
 .action-btn.primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 30px var(--accent-glow);
 }
 
 .action-btn.secondary {
@@ -772,7 +770,6 @@ h1, h2, h3, .orbitron {
 .action-btn.secondary:hover {
     background: var(--card-hover);
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
     border-color: var(--accent-ring);
 }
 
@@ -788,7 +785,7 @@ h1, h2, h3, .orbitron {
     background: var(--inset-bg);
     border-radius: 50%;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: background-color 0.2s ease, width 0.2s ease, transform 0.2s ease;
 }
 
 .dot:hover {
@@ -800,7 +797,6 @@ h1, h2, h3, .orbitron {
     width: 22px;
     border-radius: 4px;
     background: var(--primary);
-    box-shadow: 0 0 10px var(--primary);
 }
 
 /* Header Center */
@@ -832,13 +828,12 @@ h1, h2, h3, .orbitron {
     background: var(--primary);
     border-radius: 50%;
     opacity: 0.5;
-    animation: scanDot 1.5s ease-in-out infinite;
 }
 
-.scan-dot:nth-child(2) { animation-delay: 0.3s; }
-.scan-dot:nth-child(3) { animation-delay: 0.6s; }
-.scan-dot:nth-child(4) { animation-delay: 0.9s; }
-.scan-dot:nth-child(5) { animation-delay: 1.2s; }
+.scan-dot:nth-child(2) { opacity: 0.62; }
+.scan-dot:nth-child(3) { opacity: 0.74; }
+.scan-dot:nth-child(4) { opacity: 0.86; }
+.scan-dot:nth-child(5) { opacity: 1; }
 
 @keyframes scanDot {
     0%, 100% { opacity: 0.2; transform: scale(1); }
@@ -867,7 +862,8 @@ h1, h2, h3, .orbitron {
     position: absolute;
     inset: 0;
     background: var(--modal-scrim);
-    backdrop-filter: blur(5px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .modal-content {
@@ -1020,7 +1016,8 @@ h1, h2, h3, .orbitron {
 .anatomy-callout-popup {
     position: fixed;
     background: var(--tooltip-bg);
-    backdrop-filter: blur(15px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border: 1px solid var(--primary);
     padding: 12px 16px;
     border-radius: 12px;
@@ -1085,6 +1082,17 @@ h1, h2, h3, .orbitron {
     100% { opacity: 0; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 1ms !important;
+    }
+}
+
 /* Responsive */
 @media (max-width: 1280px) {
     #ui-overlay {
@@ -1107,46 +1115,228 @@ h1, h2, h3, .orbitron {
 }
 
 @media (max-width: 768px) {
+    body {
+        width: 100%;
+        height: auto;
+        min-height: 100vh;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
     #ui-overlay {
-        grid-template-columns: 1fr;
+        width: 100%;
+        min-height: 100vh;
+        height: auto;
+        grid-template-columns: minmax(0, 1fr);
         grid-template-rows: 60px auto auto auto 80px;
         gap: 12px;
         padding: 12px;
+        overflow-x: hidden;
     }
+
+    .top-bar,
+    .central-display,
+    .right-panel,
+    .bottom-bar {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .top-bar {
+        gap: 10px;
+        padding: 0;
+    }
+
+    .logo {
+        min-width: 0;
+        gap: 8px;
+    }
+
+    .logo-text h1 {
+        font-size: 0.85rem;
+        letter-spacing: 2px;
+        overflow-wrap: anywhere;
+    }
+
+    .logo-text p {
+        max-width: 120px;
+        font-size: 0.48rem;
+        line-height: 1.45;
+        letter-spacing: 2px;
+    }
+
+    #header-center {
+        min-width: 0;
+    }
+
+    .scan-indicator {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .scan-indicator-label {
+        font-size: 0.55rem;
+        letter-spacing: 2px;
+    }
+
+    .explorer-profile {
+        flex-shrink: 0;
+        gap: 8px;
+        padding: 6px;
+    }
+
+    .explorer-profile .icon-btn {
+        display: none;
+    }
+
     .sidebar {
         grid-row: 3;
         flex-direction: row;
         overflow-x: auto;
         overflow-y: hidden;
         padding-bottom: 4px;
+        max-width: 100%;
     }
+
     .creature-card {
-        min-width: 140px;
+        min-width: min(78vw, 280px);
+        max-width: min(78vw, 280px);
         flex-shrink: 0;
+        gap: 10px;
     }
+
+    .card-info {
+        min-width: 0;
+    }
+
+    .card-info h3,
+    .card-info p {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .card-img {
+        width: 48px;
+        height: 48px;
+    }
+
     .central-display {
         grid-column: 1;
         grid-row: 2;
         padding: 10px;
+        overflow: visible;
     }
+
     .right-panel {
         grid-column: 1;
         grid-row: 4;
+        overflow: visible;
     }
+
+    .glass-card {
+        min-width: 0;
+        padding: 18px;
+    }
+
     .creature-header h2 {
         font-size: 1.8rem;
+        line-height: 1.05;
+        overflow-wrap: anywhere;
     }
+
+    .creature-header p {
+        letter-spacing: 3px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .creature-description {
+        max-width: 100%;
+        font-size: 0.9rem;
+        overflow-wrap: anywhere;
+    }
+
+    .sector-badge {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        line-height: 1.4;
+    }
+
+    .creature-tags {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .tag {
+        min-width: 0;
+        padding: 9px 10px;
+        overflow-wrap: anywhere;
+    }
+
+    .stat-label {
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-start;
+    }
+
+    .stat-value,
+    .mission-title,
+    .mission-desc {
+        overflow-wrap: anywhere;
+    }
+
+    .mission-item {
+        align-items: flex-start;
+    }
+
+    .mission-arrow {
+        display: none;
+    }
+
     .explorer-profile .profile-info {
         display: none;
     }
+
     .bottom-bar {
+        grid-row: 5;
+        flex-direction: column;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    .expedition-log {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .log-label {
+        gap: 12px;
+        letter-spacing: 1.5px;
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+        gap: 10px;
+    }
+
+    .action-btn {
+        width: 100%;
+        justify-content: center;
+        padding: 12px 14px;
+        letter-spacing: 1.5px;
+    }
+
+    .pagination-dots {
+        max-width: 100%;
         flex-wrap: wrap;
         justify-content: center;
     }
-    .expedition-log {
-        width: 100%;
-        max-width: 200px;
-    }
+
     .compare-grid {
         grid-template-columns: 1fr;
     }
