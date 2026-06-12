@@ -10,6 +10,10 @@ and licenses. If you add or replace a model, add its entry here.
 - **Local file:** `js/ne_110m_land.json`
 - **License:** CC0 / public domain
 
+## Map Icons
+- Animal silhouette icons by Delapouite and Lorc from game-icons.net, licensed CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/).
+- Hammerhead, whale shark, orca, and sailfish silhouettes: public-domain (CC0) silhouettes via PhyloPic (https://www.phylopic.org). CC0 1.0 — no attribution required.
+
 ---
 
 ## Manta Ray (Model 84B — Manta Ray Swimming)

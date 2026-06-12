@@ -176,23 +176,33 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
-        .species-info { display: flex; flex-direction: column; }
+        .species-info {
+            display: flex;
+            flex: 1;
+            min-width: 0;
+            flex-direction: column;
+        }
 
         .species-name {
             font-family: 'Sora', sans-serif;
             font-size: 12px;
             font-weight: 600;
             color: #fff;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
+            letter-spacing: 0;
+            line-height: 1.2;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
 
         .species-tag {
             font-family: 'JetBrains Mono', monospace;
             font-size: 10px;
             color: #8892a4;
-            letter-spacing: 0.3px;
+            letter-spacing: 0;
             margin-top: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .species-card.active .species-name { color: #3df5c4; }
@@ -303,7 +313,7 @@
         }
 
         .status-high { background: #4caf50; box-shadow: 0 0 6px rgba(76, 175, 80, 0.5); }
-        .status-moderate { background: #ffeb3b; box-shadow: 0 0 6px rgba(255, 235, 59, 0.5); }
+        .status-moderate { background: #f5a623; box-shadow: 0 0 6px rgba(245, 166, 35, 0.5); }
         .status-low { background: #ff5252; box-shadow: 0 0 6px rgba(255, 82, 82, 0.5); }
 
         .migration-toggle {
@@ -606,15 +616,32 @@
 
         let activeCreature = null;
         let migrationVisible = false;
+        let pulseAnimationFrame = null;
+        let pulseStartTime = null;
         let activeHabitatPopup = null;
         let landGeoJSON = null;
         let landFeatureIndex = [];
 
         const HABITAT_SOURCE_ID = 'habitat-points';
+        const HABITAT_PULSE_LAYER_ID = 'habitat-pulse-layer';
         const HABITAT_HALO_LAYER_ID = 'habitat-points-halo';
         const HABITAT_DOT_LAYER_ID = 'habitat-points-dot';
+        const HABITAT_ICON_LAYER_ID = 'habitat-icon-layer';
+        const HABITAT_ICON_IMAGE_NAMES = [
+            'whale-tail',
+            'sperm-whale',
+            'octopus',
+            'manta-ray',
+            'sea-turtle',
+            'hammerhead',
+            'whale-shark',
+            'orca',
+            'sailfish',
+        ];
         const LAND_DATA_URL = './js/ne_110m_land.json';
         const ROUTE_LAND_SAMPLE_KM = 35;
+        const habitatIconImageData = new Map();
+        const habitatIconImageLoads = new Set();
 
         function getGeometryBbox(geometry) {
             const bbox = [Infinity, Infinity, -Infinity, -Infinity];
@@ -674,7 +701,59 @@
         function getMarkerColor(pop) {
             if (pop === 'high') return '#4caf50';
             if (pop === 'low') return '#ff5252';
-            return '#ffeb3b';
+            return '#f5a623';
+        }
+
+        function addHabitatIconImage(name, imageData) {
+            const id = `habitat-icon-${name}`;
+            if (map.hasImage(id)) return;
+
+            try {
+                map.addImage(id, imageData, { pixelRatio: 2 });
+            } catch (e) {
+                console.warn(`Failed to add habitat icon image: ${id}`, e);
+            }
+        }
+
+        function loadHabitatIconImages() {
+            HABITAT_ICON_IMAGE_NAMES.forEach(name => {
+                const id = `habitat-icon-${name}`;
+                if (map.hasImage(id)) return;
+
+                const cachedImageData = habitatIconImageData.get(name);
+                if (cachedImageData) {
+                    addHabitatIconImage(name, cachedImageData);
+                    return;
+                }
+
+                if (habitatIconImageLoads.has(name)) return;
+                habitatIconImageLoads.add(name);
+
+                const image = new Image();
+                image.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 64;
+                        canvas.height = 64;
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) return;
+
+                        ctx.clearRect(0, 0, 64, 64);
+                        ctx.drawImage(image, 0, 0, 64, 64);
+
+                        const imageData = ctx.getImageData(0, 0, 64, 64);
+                        habitatIconImageData.set(name, imageData);
+                        addHabitatIconImage(name, imageData);
+                    } catch (e) {
+                        console.warn(`Failed to prepare habitat icon image: ${id}`, e);
+                    }
+                };
+                image.onerror = () => {
+                    habitatIconImageLoads.delete(name);
+                    console.warn(`Failed to load habitat icon image: ${id}`);
+                };
+                image.src = `assets/icons/${name}.svg`;
+            });
         }
 
         function getHabitatPopupHTML(habitat) {
@@ -693,7 +772,13 @@
                 activeHabitatPopup = null;
             }
 
-            [HABITAT_DOT_LAYER_ID, HABITAT_HALO_LAYER_ID].forEach(id => {
+            if (pulseAnimationFrame) {
+                cancelAnimationFrame(pulseAnimationFrame);
+                pulseAnimationFrame = null;
+            }
+            pulseStartTime = null;
+
+            [HABITAT_ICON_LAYER_ID, HABITAT_DOT_LAYER_ID, HABITAT_HALO_LAYER_ID, HABITAT_PULSE_LAYER_ID].forEach(id => {
                 if (map.getLayer(id)) map.removeLayer(id);
             });
 
@@ -719,6 +804,21 @@
             migrationVisible = false;
         }
 
+        function animateHabitatPulse(timestamp) {
+            if (!map.getLayer(HABITAT_PULSE_LAYER_ID)) {
+                pulseAnimationFrame = null;
+                pulseStartTime = null;
+                return;
+            }
+
+            if (pulseStartTime === null) pulseStartTime = timestamp;
+            const period = 1800;
+            const phase = ((timestamp - pulseStartTime) % period) / period;
+            map.setPaintProperty(HABITAT_PULSE_LAYER_ID, 'circle-radius', 12 + phase * 30);
+            map.setPaintProperty(HABITAT_PULSE_LAYER_ID, 'circle-stroke-opacity', Math.sin(phase * Math.PI) * 0.6);
+            pulseAnimationFrame = requestAnimationFrame(animateHabitatPulse);
+        }
+
         function addHabitatMarkers(creature) {
             clearMarkers();
 
@@ -736,8 +836,23 @@
                             season: h.season,
                             notes: h.notes,
                             color: getMarkerColor(h.population),
+                            icon: `habitat-icon-${creature.iconImage}`,
                         }
                     }))
+                }
+            });
+
+            map.addLayer({
+                id: HABITAT_PULSE_LAYER_ID,
+                type: 'circle',
+                source: HABITAT_SOURCE_ID,
+                paint: {
+                    'circle-color': ['get', 'color'],
+                    'circle-radius': 12,
+                    'circle-opacity': 0,
+                    'circle-stroke-color': ['get', 'color'],
+                    'circle-stroke-width': 3,
+                    'circle-stroke-opacity': 0,
                 }
             });
 
@@ -751,8 +866,8 @@
                         'interpolate',
                         ['linear'],
                         ['zoom'],
-                        1, 10,
-                        4, 16,
+                        1, 13,
+                        4, 20,
                     ],
                     'circle-opacity': 0.22,
                     'circle-blur': 0.45,
@@ -769,17 +884,37 @@
                         'interpolate',
                         ['linear'],
                         ['zoom'],
-                        1, 5,
-                        4, 8,
+                        1, 10,
+                        4, 16,
                     ],
                     'circle-stroke-color': 'rgba(255, 255, 255, 0.55)',
                     'circle-stroke-width': 2,
                 }
             });
+
+            map.addLayer({
+                id: HABITAT_ICON_LAYER_ID,
+                type: 'symbol',
+                source: HABITAT_SOURCE_ID,
+                layout: {
+                    'icon-image': ['get', 'icon'],
+                    'icon-allow-overlap': true,
+                    'icon-ignore-placement': true,
+                    'icon-size': [
+                        'interpolate',
+                        ['linear'],
+                        ['zoom'],
+                        1, 0.55,
+                        4, 0.9,
+                    ],
+                }
+            });
+
+            if (!pulseAnimationFrame) pulseAnimationFrame = requestAnimationFrame(animateHabitatPulse);
         }
 
         function bringHabitatMarkersToFront() {
-            [HABITAT_HALO_LAYER_ID, HABITAT_DOT_LAYER_ID].forEach(id => {
+            [HABITAT_PULSE_LAYER_ID, HABITAT_HALO_LAYER_ID, HABITAT_DOT_LAYER_ID, HABITAT_ICON_LAYER_ID].forEach(id => {
                 if (map.getLayer(id)) map.moveLayer(id);
             });
         }
@@ -832,24 +967,35 @@
             return turf.bezierSpline(line, { resolution: 10000, sharpness }).geometry.coordinates;
         }
 
+        // Cache smoothed+validated routes per creature. bezierSpline (resolution 10000,
+        // run up to 3x) plus the land checks are expensive, so compute once and reuse.
+        const smoothedRouteCache = new Map();
+
         function smoothRoute(coords, routeLabel) {
+            if (smoothedRouteCache.has(routeLabel)) return smoothedRouteCache.get(routeLabel);
+
             const candidates = [
                 { label: 'smooth', coords: createSmoothedRoute(coords, 0.55) },
                 { label: 'gentle', coords: createSmoothedRoute(coords, 0.25) },
                 { label: 'waypoints', coords: densifyRoute(coords, 80) },
             ];
 
+            // Land data not loaded yet — return the smooth candidate without caching,
+            // so a later call can re-validate once the polygons are available.
             if (!landFeatureIndex.length) return candidates[0].coords;
 
+            let result = null;
             for (const candidate of candidates) {
                 const landHits = getRouteLandHits(candidate.coords);
-                if (!landHits.length) return candidate.coords;
+                if (!landHits.length) { result = candidate.coords; break; }
 
                 console.warn(`${routeLabel} ${candidate.label} migration route intersects land; trying fallback.`, landHits);
             }
 
-            console.warn(`${routeLabel} migration route skipped because every candidate intersects land.`);
-            return null;
+            if (!result) console.warn(`${routeLabel} migration route skipped because every candidate intersects land.`);
+
+            smoothedRouteCache.set(routeLabel, result);
+            return result;
         }
 
         function flyToRouteStart(startCoord) {
@@ -918,6 +1064,11 @@
 
             let step = 0;
             function animateDashArray(timestamp) {
+                if (!map.getLayer('migration-dashed')) {
+                    antPathAnimation = null;
+                    return;
+                }
+
                 const newStep = parseInt((timestamp / 50) % dashArraySequence.length);
                 if (newStep !== step) {
                     map.setPaintProperty('migration-dashed', 'line-dasharray', dashArraySequence[newStep]);
@@ -1152,6 +1303,7 @@
         });
 
         map.on('load', async () => {
+            loadHabitatIconImages();
             await loadLandData();
             buildSpeciesStrip();
         });

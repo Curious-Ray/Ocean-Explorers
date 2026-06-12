@@ -1,5 +1,46 @@
 export const creatures = [
     {
+        id: 'humpback',
+        name: 'HUMPBACK WHALE',
+        subtitle: 'THE SINGING VOYAGER',
+        biome: 'Open Ocean',
+        sector: 'Ocean Sector 10',
+        description: 'Humpback whales are renowned for their hauntingly complex songs that travel vast distances underwater. These acrobatic giants breach, slap, and spiral through every ocean on Earth during epic annual migrations.',
+        tags: [
+            { icon: '🎵', label: 'SONG', value: 'Hours-long compositions' },
+            { icon: '🌊', label: 'BREACH', value: 'Full-body aerial display' },
+            { icon: '🐋', label: 'MIGRATION', value: 'Up to 8,000 km' }
+        ],
+        anatomy: [
+            { label: 'Pectoral Fins', desc: 'Longest of any whale — up to 5 m', x: 35, y: 55 },
+            { label: 'Throat Grooves', desc: 'Expandable pleats for lunge feeding', x: 25, y: 40 },
+            { label: 'Flukes', desc: 'Unique pattern used for ID', x: 85, y: 65 }
+        ],
+        stats: {
+            size: '12 - 16 m',
+            habitat: 'Open Ocean',
+            diet: 'Krill, Small Fish',
+            lifespan: '45 - 100 yrs',
+            speed: '3 - 14 km/h',
+            status: 'Least Concern'
+        },
+        missions: [
+            { icon: '🎵', title: 'SONG ARCHIVE', desc: 'Record and catalog regional song variations.' },
+            { icon: '🫧', title: 'BUBBLE NET', desc: 'Study cooperative bubble-net feeding techniques.' },
+            { icon: '📸', title: 'FLUKE ID', desc: 'Photograph tail flukes for population tracking.' }
+        ],
+        image: 'whale.svg',
+        color: '#5c6bc0',
+        sceneColor: 0x1a2a5a,
+        expeditionLog: { current: 11, total: 26 },
+        modelPath: '3d model/humpback_whale_compressed.glb',
+        credit: { title: 'Humpback Whale', author: 'Bohdan Lvov', url: 'https://skfb.ly/oHQvR', license: 'CC BY 4.0' },
+        animationSpeed: 3.0,
+        modelScale: 1.0,
+        modelPosition: [0, 0, 0],
+        modelRotation: [0, -Math.PI / 2, 0]
+    },
+    {
         id: 'spermwhale',
         name: 'SPERM WHALE',
         subtitle: 'THE DEEP DIVER',
@@ -281,47 +322,6 @@ export const creatures = [
         expeditionLog: { current: 9, total: 22 },
         modelPath: '3d model/female_orca_compressed.glb',
         credit: { title: 'Female Orca', author: 'neurodolphin', url: 'https://skfb.ly/THDz', license: 'CC BY-NC 4.0' },
-        modelScale: 1.0,
-        modelPosition: [0, 0, 0],
-        modelRotation: [0, -Math.PI / 2, 0]
-    },
-    {
-        id: 'humpback',
-        name: 'HUMPBACK WHALE',
-        subtitle: 'THE SINGING VOYAGER',
-        biome: 'Open Ocean',
-        sector: 'Ocean Sector 10',
-        description: 'Humpback whales are renowned for their hauntingly complex songs that travel vast distances underwater. These acrobatic giants breach, slap, and spiral through every ocean on Earth during epic annual migrations.',
-        tags: [
-            { icon: '🎵', label: 'SONG', value: 'Hours-long compositions' },
-            { icon: '🌊', label: 'BREACH', value: 'Full-body aerial display' },
-            { icon: '🐋', label: 'MIGRATION', value: 'Up to 8,000 km' }
-        ],
-        anatomy: [
-            { label: 'Pectoral Fins', desc: 'Longest of any whale — up to 5 m', x: 35, y: 55 },
-            { label: 'Throat Grooves', desc: 'Expandable pleats for lunge feeding', x: 25, y: 40 },
-            { label: 'Flukes', desc: 'Unique pattern used for ID', x: 85, y: 65 }
-        ],
-        stats: {
-            size: '12 - 16 m',
-            habitat: 'Open Ocean',
-            diet: 'Krill, Small Fish',
-            lifespan: '45 - 100 yrs',
-            speed: '3 - 14 km/h',
-            status: 'Least Concern'
-        },
-        missions: [
-            { icon: '🎵', title: 'SONG ARCHIVE', desc: 'Record and catalog regional song variations.' },
-            { icon: '🫧', title: 'BUBBLE NET', desc: 'Study cooperative bubble-net feeding techniques.' },
-            { icon: '📸', title: 'FLUKE ID', desc: 'Photograph tail flukes for population tracking.' }
-        ],
-        image: 'whale.svg',
-        color: '#5c6bc0',
-        sceneColor: 0x1a2a5a,
-        expeditionLog: { current: 11, total: 26 },
-        modelPath: '3d model/humpback_whale_compressed.glb',
-        credit: { title: 'Humpback Whale', author: 'Bohdan Lvov', url: 'https://skfb.ly/oHQvR', license: 'CC BY 4.0' },
-        animationSpeed: 3.0,
         modelScale: 1.0,
         modelPosition: [0, 0, 0],
         modelRotation: [0, -Math.PI / 2, 0]
