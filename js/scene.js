@@ -31,8 +31,11 @@ export class SceneManager {
         this.mixers = [];
         this.modelsCache = {};
         this.activeFrameRate = 30;
+        this.idleFrameRate = 18;
+        this.maxAnimationDelta = 1 / 12;
         this.activeUntil = 0;
         this.animationFrameId = null;
+        this.animationTimeoutId = null;
         this._lastFrameTime = 0;
         this.isCanvasFrozen = false;
 
@@ -557,8 +560,27 @@ export class SceneManager {
         const now = performance.now();
         this.activeUntil = Math.max(this.activeUntil, now + duration);
 
-        if (this.animationFrameId === null) {
+        if (this.animationTimeoutId !== null) {
+            clearTimeout(this.animationTimeoutId);
+            this.animationTimeoutId = null;
+        }
+
+        this.scheduleNextFrame();
+    }
+
+    scheduleNextFrame(delay = 0) {
+        if (document.hidden || this.animationFrameId !== null || this.animationTimeoutId !== null) return;
+
+        const queueFrame = () => {
+            this.animationTimeoutId = null;
+            if (document.hidden || this.animationFrameId !== null) return;
             this.animationFrameId = requestAnimationFrame((frameTime) => this.animate(frameTime));
+        };
+
+        if (delay > 0) {
+            this.animationTimeoutId = setTimeout(queueFrame, delay);
+        } else {
+            queueFrame();
         }
     }
 
@@ -582,20 +604,17 @@ export class SceneManager {
         }
     }
 
+    shouldRenderContinuously() {
+        // Creature models need a steady low-FPS loop for GLTF clips and the
+        // subtle idle sway. Without this, the CPU-saving snapshot freezes them.
+        return Boolean(this.creatureMesh);
+    }
+
     animate(frameTime = performance.now()) {
         this.animationFrameId = null;
 
         if (document.hidden) return;
 
-        const frameInterval = 1000 / this.activeFrameRate;
-        if (this._lastFrameTime && frameTime - this._lastFrameTime < frameInterval) {
-            if (frameTime < this.activeUntil) {
-                this.animationFrameId = requestAnimationFrame((nextFrameTime) => this.animate(nextFrameTime));
-            } else {
-                this.freezeCanvas();
-            }
-            return;
-        }
         this._lastFrameTime = frameTime;
 
         if (!this._readyFired && this.onReady) {
@@ -604,7 +623,7 @@ export class SceneManager {
         }
 
         const elapsedTime = this.clock.getElapsedTime();
-        const delta = Math.min(elapsedTime - (this._lastTime || elapsedTime), 1 / 30);
+        const delta = Math.min(elapsedTime - (this._lastTime || elapsedTime), this.maxAnimationDelta);
         this._lastTime = elapsedTime;
 
         for (const mixer of this.mixers) {
@@ -674,8 +693,13 @@ export class SceneManager {
 
         this.renderer.render(this.scene, this.camera);
 
-        if (frameTime < this.activeUntil && this.animationFrameId === null) {
-            this.animationFrameId = requestAnimationFrame((nextFrameTime) => this.animate(nextFrameTime));
+        const shouldContinue = frameTime < this.activeUntil || this.shouldRenderContinuously();
+        if (shouldContinue) {
+            const now = performance.now();
+            const targetFrameRate = now < this.activeUntil ? this.activeFrameRate : this.idleFrameRate;
+            const frameInterval = 1000 / targetFrameRate;
+            const renderTime = now - frameTime;
+            this.scheduleNextFrame(Math.max(0, frameInterval - renderTime));
         } else if (frameTime >= this.activeUntil) {
             this.freezeCanvas();
         }
